@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beekeeping Pro - 21:00 Lock</title>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        :root { --bg: #121212; --card: #1e1e1e; --text: #ffffff; --accent: #1a73e8; --border: #333; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; }
+        
+        .main-yield-banner { background: linear-gradient(135deg, #1e1e1e, #2d2d2d); padding: 20px; border-radius: 15px; margin-bottom: 15px; text-align: center; border: 1px solid var(--border); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .main-yield-val { font-size: 2.8em; font-weight: bold; }
+        .main-yield-label { font-size: 0.7em; color: #888; letter-spacing: 1px; margin-bottom: 5px; }
+
+        .history-container { display: flex; overflow-x: auto; gap: 8px; margin-bottom: 15px; padding-bottom: 10px; }
+        .history-day { background: var(--card); min-width: 85px; padding: 12px 8px; border-radius: 12px; border: 1px solid var(--border); text-align: center; flex: 1; }
+        .hist-date { font-size: 0.65em; color: #888; margin-bottom: 4px; }
+        .hist-val { font-size: 1em; font-weight: bold; }
+
+        .last-update { font-size: 0.75em; color: #ffca28; text-align: center; margin-bottom: 10px; background: #252525; padding: 8px; border-radius: 10px; border: 1px solid #444; }
+        
+        .toolbar { background: var(--card); padding: 10px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
+        .grid-container { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        @media(min-width: 600px) { .grid-container { grid-template-columns: 1fr 1fr; } }
+        
+        .card { background: var(--card); border-radius: 15px; padding: 15px; border-top: 5px solid var(--accent); }
+        .header-flex { display: flex; justify-content: space-between; align-items: center; }
+        h3 { margin: 0; font-size: 0.85em; color: #888; text-transform: uppercase; }
+        .value-display { font-size: 2.2em; font-weight: bold; margin: 5px 0; display: flex; align-items: baseline; }
+        .stats-row { display: flex; gap: 10px; font-size: 0.75em; color: #777; margin-bottom: 10px; border-top: 1px solid #2a2a2a; padding-top: 5px; }
+        .chart-box { width: 100%; height: 160px; }
+        
+        .wide-card { background: var(--card); border-radius: 15px; padding: 15px; margin-top: 15px; border-top: 5px solid #4caf50; }
+        .wide-chart-box { width: 100%; height: 280px; }
+        .legend-box { display: flex; justify-content: center; gap: 15px; font-size: 0.8em; margin-top: 5px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+
+        select { background: #333; color: white; border: none; padding: 8px; border-radius: 8px; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+    <div class="main-yield-banner">
+        <div class="main-yield-label">ΖΩΝΤΑΝΗ ΔΙΑΦΟΡΑ 24ΩΡΟΥ (ΤΡΕΧΟΥΣΑ vs ΕΧΘΕΣ ΙΔΙΑ ΩΡΑ)</div>
+        <div id="24hYieldMain" class="main-yield-val">--</div>
+    </div>
+
+    <div style="font-size: 0.7em; color: #888; margin-bottom: 5px; text-align: center;">ΙΣΤΟΡΙΚΟ 15 ΗΜΕΡΩΝ (21:00 - 21:00 σε gr)</div>
+    <div class="history-container" id="historyLog"></div>
+
+    <div class="last-update" id="mainUpdate">🕒 Φόρτωση...</div>
+
+    <div class="wide-card">
+        <div class="header-flex">
+            <h3>Σύγκριση Πορείας Βάρους (24h)</h3>
+            <span>⚖️</span>
+        </div>
+        <div id="compare_chart" class="wide-chart-box"></div>
+        <div class="legend-box">
+            <div class="legend-item"><span style="color:#ffca28; font-size:1.2em;">●</span> Χθες</div>
+            <div class="legend-item"><span style="color:#4caf50; font-size:1.2em;">●</span> Σήμερα</div>
+        </div>
+    </div>
+
+    <div class="toolbar" style="margin-top:15px;">
+        <span style="font-size: 0.75em; color: #888;">Προβολή τρεχουσών μετρήσεων:</span>
+        <select id="resultsRange" onchange="loadData()">
+            <option value="10">10 μετρήσεις</option>
+            <option value="20" selected>20 μετρήσεις</option>
+            <option value="50">50 μετρήσεις</option>
+        </select>
+    </div>
+
+    <div id="dashboard" class="grid-container"></div>
+
+    <script>
+        const channelID = '3482779'; 
+        const readAPIKey = '2PE59JF1EPMIVZOB'; 
+
+        const fieldConfig = {
+            'field1': { label: 'Βάρος', unit: 'gr', icon: '⚖️', color: '#ff5252', decimals: 0, isWeight: true }, 
+            'field2': { label: 'Υγρασία', unit: '%', icon: '💧', color: '#448aff', decimals: 1 },
+            'field3': { label: 'Θερμοκρασία', unit: '°C', icon: '🌡️', color: '#4caf50', decimals: 1 },
+            'field4': { label: 'Μπαταρία', unit: 'V', icon: '🔋', color: '#ffc107', decimals: 2 },
+            'field5': { label: 'Διαφορά', unit: 'gr', icon: '📉', color: '#ff4081', decimals: 0 },
+            'field6': { label: 'Σήμα GSM', unit: '/30', icon: '📶', color: '#00bcd4', decimals: 0 },
+            'field7': { label: 'ds18b20', unit: '°C', icon: '🌡️', color: '#4caf50', decimals: 1 }
+        };
+
+        google.charts.load('current', {'packages':['corechart']});
+        google.charts.setOnLoadCallback(() => { loadData(); updateHivesInfo(); });
+
+        async function updateHivesInfo() {
+            try {
+                const res = await fetch(`https://api.thingspeak.com/channels/${channelID}/feeds.json?api_key=${readAPIKey}&days=20`);
+                if(!res.ok) throw new Error("API Error");
+                const data = await res.json();
+                const feeds = data.feeds;
+                if(!feeds || !feeds.length) return;
+
+                // ΣΥΝΑΡΤΗΣΗ ΙΣΤΟΡΙΚΟΥ: Βρίσκει τη μέτρηση όσο πιο κοντά γίνεται στις 21:00
+                const getWeightAt21 = (targetDate) => {
+                    const target = new Date(targetDate);
+                    target.setHours(21, 0, 0, 0);
+
+                    const now = new Date();
+                    // Αν ζητάμε το σημερινό κουτάκι αλλά δεν έχει πάει ακόμα 21:00, το αφήνουμε κενό
+                    if (target.toDateString() === now.toDateString() && now.getHours() < 21) {
+                        return null;
+                    }
+
+                    const dayFeeds = feeds.filter(f => {
+                        if (f.field1 === null || isNaN(parseFloat(f.field1))) return false;
+                        const fDate = new Date(f.created_at);
+                        return fDate.toDateString() === target.toDateString();
+                    });
+
+                    if(dayFeeds.length === 0) return null;
+
+                    const closest = dayFeeds.reduce((prev, curr) => {
+                        const prevDiff = Math.abs(new Date(prev.created_at) - target);
+                        const currDiff = Math.abs(new Date(curr.created_at) - target);
+                        return currDiff < prevDiff ? curr : prev;
+                    });
+
+                    return Math.round(parseFloat(closest.field1));
+                };
+
+                // ΖΩΝΤΑΝΗ ΔΙΑΦΟΡΑ 24ΩΡΟΥ (Τρέχουσα τιμή vs χθεσινή ίδια ώρα)
+                const validFeeds = feeds.filter(f => f.field1 !== null && !isNaN(parseFloat(f.field1)));
+                const latestFeed = validFeeds[validFeeds.length - 1];
+                
+                let realtimeDiffText = "-- gr";
+                let realtimeColor = "#888";
+
+                if (latestFeed) {
+                    const currentWeight = Math.round(parseFloat(latestFeed.field1));
+                    const currentTime = new Date(latestFeed.created_at);
+                    const targetPastTime = new Date(currentTime.getTime() - (24 * 60 * 60 * 1000));
+                    
+                    const pastFeeds = feeds.filter(f => f.field1 !== null && !isNaN(parseFloat(f.field1)));
+                    if (pastFeeds.length > 0) {
+                        const closestPast = pastFeeds.reduce((prev, curr) => {
+                            const prevDiff = Math.abs(new Date(prev.created_at) - targetPastTime);
+                            const currDiff = Math.abs(new Date(curr.created_at) - targetPastTime);
+                            return currDiff < prevDiff ? curr : prev;
+                        });
+                        
+                        if (Math.abs(new Date(closestPast.created_at) - targetPastTime) < (2 * 60 * 60 * 1000)) {
+                            const pastWeight = Math.round(parseFloat(closestPast.field1));
+                            const diff = currentWeight - pastWeight;
+                            
+                            if (Math.abs(diff) < 5000) {
+                                realtimeDiffText = `${diff > 0 ? '+' : ''}${diff} gr`;
+                                realtimeColor = diff >= 0 ? '#4caf50' : '#ff5252';
+                            }
+                        }
+                    }
+                }
+
+                document.getElementById('24hYieldMain').innerText = realtimeDiffText;
+                document.getElementById('24hYieldMain').style.color = realtimeColor;
+
+                // ΓΕΜΙΣΜΑ ΙΣΤΟΡΙΚΟΥ 15 ΗΜΕΡΩΝ (Σύγκριση 21:00 με 21:00 της προηγούμενης)
+                const historyLog = document.getElementById('historyLog');
+                historyLog.innerHTML = '';
+                for (let i = 0; i < 15; i++) {
+                    const d0 = new Date(); d0.setDate(d0.getDate() - i);
+                    const d1 = new Date(); d1.setDate(d1.getDate() - (i + 1));
+                    const weight0 = getWeightAt21(d0); 
+                    const weight1 = getWeightAt21(d1);
+                    
+                    const dayDiv = document.createElement('div'); 
+                    dayDiv.className = 'history-day';
+                    const dayLabel = d0.toLocaleDateString('el-GR', {weekday:'short', day:'numeric'});
+                    
+                    if (weight0 !== null && weight1 !== null) {
+                        const diff = weight0 - weight1;
+                        if (Math.abs(diff) < 5000) {
+                            dayDiv.innerHTML = `<div class="hist-date">${dayLabel}</div><div class="hist-val" style="color:${diff >= 0 ? '#4caf50' : '#ff5252'}">${diff > 0 ? '+' : ''}${diff}g</div>`;
+                        } else {
+                            dayDiv.innerHTML = `<div class="hist-date">${dayLabel}</div><div class="hist-val" style="color:#666">--</div>`;
+                        }
+                    } else {
+                        dayDiv.innerHTML = `<div class="hist-date">${dayLabel}</div><div class="hist-val" style="color:#666">--</div>`;
+                    }
+                    historyLog.appendChild(dayDiv);
+                }
+
+                // ΓΡΑΦΗΜΑ ΣΥΓΚΡΙΣΗΣ (ΚΑΘΑΡΟΙ ΑΚΕΡΑΙΟΙ)
+                const compareTable = new google.visualization.DataTable();
+                compareTable.addColumn('string', 'Ώρα');
+                compareTable.addColumn('number', 'Χθες');
+                compareTable.addColumn('number', 'Σήμερα');
+
+                const todayStr = new Date().toDateString();
+                const yestDate = new Date(); yestDate.setDate(yestDate.getDate() - 1);
+                const yestStr = yestDate.toDateString();
+
+                let hourlyData = {};
+                for(let h=0; h<24; h++) {
+                    let hourKey = h.toString().padStart(2, '0') + ':00';
+                    hourlyData[hourKey] = { yest: null, today: null };
+                }
+
+                feeds.forEach(f => {
+                    if(f.field1 === null || isNaN(parseFloat(f.field1))) return;
+                    const fDate = new Date(f.created_at);
+                    const fHourStr = fDate.getHours().toString().padStart(2, '0') + ':00';
+                    const fDateStr = fDate.toDateString();
+
+                    const weightVal = Math.round(parseFloat(f.field1));
+
+                    if(fDateStr === yestStr) {
+                        hourlyData[fHourStr].yest = weightVal;
+                    } else if(fDateStr === todayStr) {
+                        hourlyData[fHourStr].today = weightVal;
+                    }
+                });
+
+                let lastYest = null, lastToday = null;
+                Object.keys(hourlyData).forEach(hour => {
+                    if(hourlyData[hour].yest !== null) lastYest = hourlyData[hour].yest;
+                    else if(lastYest !== null) hourlyData[hour].yest = lastYest;
+
+                    if(hourlyData[hour].today !== null) lastToday = hourlyData[hour].today;
+                    else if(lastToday !== null && parseInt(hour) <= new Date().getHours()) hourlyData[hour].today = lastToday;
+                    
+                    if(parseInt(hour) > new Date().getHours()) hourlyData[hour].today = null;
+                });
+
+                Object.keys(hourlyData).sort().forEach(hour => {
+                    compareTable.addRow([hour, hourlyData[hour].yest, hourlyData[hour].today]);
+                });
+
+                const compChartEl = document.getElementById('compare_chart');
+                if(compChartEl) {
+                    new google.visualization.LineChart(compChartEl).draw(compareTable, {
+                        backgroundColor: 'transparent', curveType: 'function', legend: 'none', pointSize: 2,
+                        hAxis: { textStyle: {color:'#888', fontSize: 10}, showTextEvery: 3 },
+                        vAxis: { 
+                            gridlines: {color:'#2a2a2a'}, 
+                            textStyle: {color:'#888'}, 
+                            format: '#####',
+                            viewWindowMode: 'pretty'
+                        },
+                        colors: ['#ffca28', '#4caf50'], 
+                        chartArea: {width:'85%', height:'80%'}
+                    });
+                }
+
+            } catch(e) { console.error(e); }
+        }
+
+        function loadData() {
+            const num = document.getElementById('resultsRange').value;
+            fetch(`https://api.thingspeak.com/channels/${channelID}/feeds.json?api_key=${readAPIKey}&results=${num}`)
+            .then(res => res.json()).then(data => {
+                if(!data.feeds || data.feeds.length === 0) return;
+                
+                const lastFeed = data.feeds[data.feeds.length - 1];
+                const lastDate = new Date(lastFeed.created_at);
+                document.getElementById('mainUpdate').innerText = `🕒 Τελευταία μέτρηση: ${lastDate.toLocaleDateString('el-GR')} | ${lastDate.toLocaleTimeString('el-GR', {hour:'2-digit', minute:'2-digit'})}`;
+
+                const dashboard = document.getElementById('dashboard');
+                dashboard.innerHTML = '';
+                
+                Object.keys(fieldConfig).forEach(key => {
+                    const conf = fieldConfig[key];
+                    let vals = data.feeds.map(f => {
+                        let v = parseFloat(f[key]);
+                        return conf.isWeight ? Math.round(v) : v;
+                    }).filter(v => !isNaN(v));
+                    
+                    if(vals.length === 0) return;
+
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div class="header-flex"><h3>${conf.label}</h3><span>${conf.icon}</span></div>
+                        <div class="value-display" style="color:${conf.color}">
+                            ${vals[vals.length-1].toFixed(conf.decimals)}<span style="font-size:0.4em; color:#666; margin-left:5px;">${conf.unit || ''}</span>
+                        </div>
+                        <div class="stats-row">
+                            <span>MIN: ${Math.min(...vals).toFixed(conf.decimals)}</span>
+                            <span>MAX: ${Math.max(...vals).toFixed(conf.decimals)}</span>
+                        </div>
+                        <div id="chart_${key}" class="chart-box"></div>
+                    `;
+                    dashboard.appendChild(card);
+                    drawChart(data.feeds, key, conf.label, conf.color, conf.isWeight);
+                });
+            }).catch(err => console.error(err));
+        }
+
+        function drawChart(feeds, key, label, color, isWeight) {
+            const dataTable = new google.visualization.DataTable();
+            dataTable.addColumn('string', 'Time');
+            dataTable.addColumn('number', label);
+            feeds.forEach(f => {
+                let v = parseFloat(f[key]);
+                if (!isNaN(v)) {
+                    if (isWeight) v = Math.round(v);
+                    dataTable.addRow([new Date(f.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), v]);
+                }
+            });
+            
+            const chartEl = document.getElementById('chart_'+key);
+            if(chartEl) {
+                new google.visualization.LineChart(chartEl).draw(dataTable, {
+                    backgroundColor: 'transparent', curveType: 'function', legend: 'none', pointSize: 5,
+                    hAxis: { textPosition: 'none' }, 
+                    vAxis: { 
+                        gridlines: {color:'#2a2a2a'}, 
+                        textStyle: {color:'#555'},
+                        format: '#####'
+                    },
+                    colors: [color], chartArea: {width:'95%', height:'80%'}
+                });
+            }
+        }
+        setInterval(() => { loadData(); updateHivesInfo(); }, 60000);
+    </script>
+</body>
+    </html>
+    
